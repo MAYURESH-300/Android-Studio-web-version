@@ -1,8 +1,6 @@
-name: GitHub Actions Cloud APK Builder
+name: Build Android APK
 
 on:
-  repository_dispatch:
-    types: [build_apk]
   workflow_dispatch:
 
 jobs:
@@ -23,39 +21,31 @@ jobs:
 
       - name: Setup Gradle Tooling
         uses: gradle/actions/setup-gradle@v3
+        continue-on-error: true
 
-      - name: Extract Project Workspace Zip
+      - name: Unzip Workspace Zip if Present
         run: |
           if [ -f "workspace/project.zip" ]; then
-            echo "Found workspace/project.zip in checkout!"
-            unzip -o workspace/project.zip
-          else
-            echo "Downloading workspace/project.zip from GitHub..."
-            curl -s -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              "https://raw.githubusercontent.com/${{ github.repository }}/main/workspace/project.zip" -o raw_project.zip || true
-            if [ -s "raw_project.zip" ]; then
-              unzip -o raw_project.zip
-            elif [ -n "${{ github.event.client_payload.projectZipBase64 }}" ]; then
-              echo "Decoding projectZipBase64 fallback..."
-              echo "${{ github.event.client_payload.projectZipBase64 }}" | base64 -d > project.zip
-              unzip -o project.zip
-            fi
+            echo "Unzipping workspace/project.zip..."
+            unzip -o workspace/project.zip || true
           fi
 
       - name: Ensure Gradle Wrapper Executable
         run: |
           if [ ! -f "./gradlew" ] || [ ! -s "./gradlew" ]; then
-            echo "Generating Gradle wrapper..."
-            gradle wrapper --gradle-version 8.7
+            echo "Generating Gradle wrapper 8.7..."
+            gradle wrapper --gradle-version 8.7 || true
           fi
           chmod +x gradlew || true
 
-      - name: Build Android APK with Gradle
+      - name: Build APK with Gradle
         run: |
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleDebug --stacktrace || ./gradlew assembleRelease --stacktrace || gradle assembleDebug --stacktrace || gradle assembleRelease --stacktrace
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: app-release
+          path: |
+            **/build/outputs/apk/**/*.apk
+            app/build/outputs/apk/**/*.apk
